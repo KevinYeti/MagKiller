@@ -1,4 +1,7 @@
-﻿using MagCore.Sdk.Helper;
+﻿using Dijkstra.NET.Contract;
+using Dijkstra.NET.Model;
+using Dijkstra.NET.ShortestPath;
+using MagCore.Sdk.Helper;
 using MagCore.Sdk.Models;
 using System;
 using System.Collections.Generic;
@@ -14,6 +17,9 @@ namespace MagKiller.App
         static Game game = null;
 
         static Dictionary<string, Position> _enemies = new Dictionary<string, Position>();
+        static Graph<string, string> _graph = null;
+        static Dictionary<string, int> _nodes = null;
+        static Dictionary<int, Position> _nodes2 = null;
 
         static void Main(string[] args)
         {
@@ -103,6 +109,7 @@ namespace MagKiller.App
 
             //找到地图上所有的基地, 为杀手准备
             GameHelper.GetGame(game.Id, ref game);
+            _enemies.Clear();
             foreach (var row in game.Rows)
             {
                 foreach (var cell in row.Cells)
@@ -113,9 +120,10 @@ namespace MagKiller.App
                     }
                 }
             }
-            
+
             //新开一个线程用于更新最新战斗数据
-            Task.Factory.StartNew(() => {
+            Task.Factory.StartNew(() =>
+            {
                 Thread.CurrentThread.IsBackground = true;
 
                 while (true)
@@ -127,10 +135,11 @@ namespace MagKiller.App
                         Console.WriteLine("Game over");
                         break;
                     }
+
                     Thread.Sleep(500);
                 }
             });
-            
+
             Attack();
         }
 
@@ -154,26 +163,28 @@ namespace MagKiller.App
                     {
                         MapHelper.Attack(game.Id, self.Id, pos.X, pos.Y);
 
-                        //var siblings = pos.GetSiblings();
-                        //foreach (var sibling in siblings)
-                        //{
-                        //    MapHelper.Attack(game.Id, self.Id, sibling.X, sibling.Y);
-                        //}
+                        var siblings = pos.GetSiblings();
+                        foreach (var sibling in siblings)
+                        {
+                            MapHelper.Attack(game.Id, self.Id, sibling.X, sibling.Y);
+                        }
                     }
 
                     Thread.Sleep(1000);
                 }
             });
 
+            foreach (var pos in self.Bases)
+            {
+                Expend(5, pos);
+            }
+
             while (game.State == 1)
             {
-                foreach (var pos in self.Bases)
-                {
-                    Expend(20, pos);
-                }
-                Thread.Sleep(5);
 
-                Thread.Sleep(0);
+                Kill();
+
+                Thread.Sleep(50);
             }
 
 
@@ -184,7 +195,7 @@ namespace MagKiller.App
             Task.Factory.StartNew(()=> {
                 for (int i = 0; i < second; i++)
                 {
-                    for (int j = 1; j <= 3; j++)
+                    for (int j = 1; j <= 2; j++)
                     {
                         int x = center.X;
                         int y = center.Y;
@@ -271,17 +282,126 @@ namespace MagKiller.App
 
         static void Kill()
         {
-            Task.Factory.StartNew(() =>
+            foreach (var key in _enemies.Keys)
             {
-                while (game.State == 1)
+                var enemy = _enemies[key];
+                var routes = findP(key);
+                if (routes != null)
                 {
-
-
+                    for (int i = 1; i < routes.Count; i++)
+                    {
+                        var route = routes[i];
+                        var cell = game.Locate(route.X, route.Y);
+                        if (cell.OwnerIndex != self.Index)
+                        {
+                            MapHelper.Attack(game.Id, self.Id, route.X, route.Y);
+                            Thread.Sleep(10);
+                        }
+                        else
+                            continue;
+                        
+                    }
                 }
+            }
 
-                    
-            });
         }
 
+        static void initG()
+        {
+            _graph = new Graph<string, string>();
+            _nodes = new Dictionary<string, int>();
+            _nodes2 = new Dictionary<int, Position>();
+            int i= 0;
+            foreach (var row in game.Rows)
+            {
+                foreach (var cell in row.Cells)
+                {
+                    _nodes.Add(cell.Key, i);
+                    _nodes2.Add(i, cell.Position);
+                    _graph.AddNode(cell.Key);
+                    i++;
+                }
+            }
+        }
+
+        static object _locker = new object();
+
+        static void updateG()
+        {
+            lock (_locker)
+            {
+                foreach (var row in game.Rows)
+                {
+                    foreach (var cell in row.Cells)
+                    {
+                        int from = _nodes[cell.Key];
+                        var siblings = cell.Position.GetSiblings();
+                        foreach (var sibling in siblings)
+                        {
+                            var neighbor = game.Locate(sibling.X, sibling.Y);
+                            if (neighbor == null)
+                            {
+                                continue;
+                            }
+                            int to = _nodes[neighbor.Key];
+                            int cost = 0;
+                            if (neighbor.Type == 0)
+                                cost = 99999; //CellType == NULL
+                            else
+                            {
+                                //neighbor.Type==1      //normal
+                                if (neighbor.State == 0)
+                                    cost = 1;   //无归属
+                                else
+                                {
+                                    if (neighbor.OwnerIndex == self.Index)
+                                    {
+                                        cost = 0;
+                                    }
+                                    else
+                                        cost = 15;
+                                }
+
+                            }
+                            _graph.Connect((uint)from, (uint)to, cost, "");
+                        }
+
+                    }
+                }
+            }
+        }
+
+        static List<Position> findP(string key)
+        {
+            lock (_locker)
+            {
+                initG();
+                updateG();
+
+                List<Position> path = null;
+                if (self.Bases != null && self.Bases.Count > 0
+                    && self.Bases[0] != null)
+                {
+                    int from = _nodes[self.Bases[0].ToString()];
+                    int to = _nodes[key];
+                    Dijkstra<string, string> _dijkstra = new Dijkstra<string, string>(_graph);
+                    IShortestPathResult result = _dijkstra.Process((uint)from, (uint)to); //result contains the shortest path
+                    
+                    if (result != null && result.IsFounded)
+                    {
+                        var routes = result.GetPath();
+                        path = new List<Position>();
+                        foreach (var route in routes)
+                        {
+                            Position pos = _nodes2[(int)route];
+                            path.Add(pos);
+                        }
+                    }
+                }
+
+                return path;
+
+            }
+        }
     }
 }
