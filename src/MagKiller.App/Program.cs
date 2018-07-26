@@ -170,14 +170,14 @@ namespace MagKiller.App
                         }
                     }
 
-                    Thread.Sleep(1000);
+                    Thread.Sleep(0);
                 }
             });
 
-            foreach (var pos in self.Bases)
-            {
-                Expend(5, pos);
-            }
+            //foreach (var pos in self.Bases)
+            //{
+            //    Expend(5, pos);
+            //}
 
             while (game.State == 1)
             {
@@ -192,7 +192,7 @@ namespace MagKiller.App
 
         static void Expend(int second, Position center)
         {
-            Task.Factory.StartNew(()=> {
+            //Task.Factory.StartNew(()=> {
                 for (int i = 0; i < second; i++)
                 {
                     for (int j = 1; j <= 2; j++)
@@ -277,7 +277,7 @@ namespace MagKiller.App
 
                     Thread.Sleep(1000);
                 }
-            });
+            //});
         }
 
         static void Kill()
