@@ -152,7 +152,7 @@ namespace MagKiller.App
             //create a thread to protect self 
             Task.Factory.StartNew(() =>
             {
-                Thread.Sleep(20000);
+                Thread.Sleep(30000);
                 Console.WriteLine("Core protector started.");
                 Thread.CurrentThread.IsBackground = true;
                 while (true)
@@ -170,7 +170,7 @@ namespace MagKiller.App
                         }
                     }
 
-                    Thread.Sleep(0);
+                    Thread.Sleep(3000);
                 }
             });
 
@@ -179,9 +179,22 @@ namespace MagKiller.App
             //    Expend(5, pos);
             //}
 
+            while (game.State != 1)
+            {
+                Thread.Sleep(100);
+            }
+
+            Rush(10);
+
+            int c = 0;
             while (game.State == 1)
             {
-
+                c++;
+                if (c % 10 == 0)
+                {
+                    Rush(3);
+                }
+                
                 Kill();
 
                 Thread.Sleep(50);
@@ -275,7 +288,7 @@ namespace MagKiller.App
                     }
 
 
-                    Thread.Sleep(1000);
+                    Thread.Sleep(2000);
                 }
             //});
         }
@@ -402,6 +415,42 @@ namespace MagKiller.App
                 return path;
 
             }
+        }
+
+        static void Rush(int second)
+        {
+            int ms = second * 1000;
+            double run = 0;
+            while (run < ms)
+            {
+                var start = DateTime.Now;
+
+                foreach (var row in game.Rows)
+                {
+                    foreach (var cell in row.Cells)
+                    {
+                        if (cell.Type != 0 && cell.State != 1
+                            && cell.OwnerIndex == self.Index) //means this cell is self's
+                        {
+                            var siblings = cell.Position.GetSiblings();
+                            foreach (var pos in siblings)
+                            {
+                                var target = game.Locate(pos.X, pos.Y);
+                                if (target != null && target.Type != 0 && target.State != 1
+                                    && target.OwnerIndex != self.Index)
+                                {
+                                    MapHelper.Attack(game.Id, self.Id, pos.X, pos.Y);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                var ts = DateTime.Now - start;
+                run += ts.TotalMilliseconds;
+            }
+            
+
         }
     }
 }
