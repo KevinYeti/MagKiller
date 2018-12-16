@@ -25,8 +25,8 @@ namespace MagKiller.App
         {
             string input = string.Empty;
 
-            ServerHelper.Initialize("http://106.75.33.221:7000/");
-            //ServerHelper.Initialize("http://localhost:6000/");
+            //ServerHelper.Initialize("http://106.75.33.221:7000/");
+            ServerHelper.Initialize("http://dev.magcore.clawit.com/");
 
             Player:
             Console.WriteLine("Enter nickname:");
